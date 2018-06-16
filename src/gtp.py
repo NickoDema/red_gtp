@@ -36,7 +36,9 @@ from atwork_ros_msgs.msg import TaskInfo
 from atwork_ros_msgs.msg import BenchmarkState
 
 import youbot_navigation.msg
+import red_msgs.msg
 from geometry_msgs.msg import Pose2D
+from geometry_msgs.msg import PoseWithCovarianceStamped as PoseWCS
 
 # CONSTANTS:
 RUN   = 1
@@ -95,6 +97,12 @@ def get_tasks():
 
 # message comparison
 def check_task(first_task, second_task):
+    if (len(first_task.tasks) != len(first_task.tasks)):
+        return False
+    #for i in xrange(len(first_task.tasks)):
+    #    f_task = first_task.tasks[i]
+    #    s_task = second_task.tasks[i]
+    #    if (f)
     return True
 
 # set current test state by the incoming message
@@ -108,14 +116,21 @@ def scenario_optimization(tasks):
     for task in tasks:
         W = get_weigth(task, task[0], task[1])
         task.append(W)
-    tasks.sort(key=lambda x: x[3], reverse=True)
+    tasks.sort(key=lambda x: x[3])
     return tasks
 
-
+# weigth calculation
 def get_weigth(task, dest, source):
+    # BNT
+    # if (Test_state.Type == 1) or (Test_state.Type == 3):
+    #     pose = "START"
+    # if (Test_state.Type == 2):
+    #     pose = "CUR"
+        # pose_msg = rospy.wait_for_message("/amcl_pose", PoseWCS)
     l = random.uniform(1, 6)
     n = len(task[2])
-    return (n*ALPHA)/l
+    to_source = 1
+    return l/(n*ALPHA) + to_source
 
 # send the goal to navi actionlib server
 # task argument can take next values: 'point' and 'dist'
@@ -124,18 +139,37 @@ def get_weigth(task, dest, source):
 def navi(task, point, orientation, duration, distance):
     navi_action_client.wait_for_server()
     goal = youbot_navigation.msg.DestGoal
-    goal.task = "point"
-    goal.target_point = "A2"
-    goal.orientation = "A0R1"
-    goal.duration = 3
-    pose = Pose2D
-    pose.x = 0.0
-    pose.y = 0.0
-    pose.theta = 0.0
-    goal.dist = pose
+    goal.task = task
+    if (task == "point"):
+        goal.target_point = point
+        goal.orientation = orientation
+        goal.duration = duration
+        pose = Pose2D
+        pose.x = 0.0
+        pose.y = 0.0
+        pose.theta = 0.0
+        goal.dist = pose
+    elif (task == "dist"):
+        goal.dist = distance
+        goal.target_point = ""
+        goal.orientation = ""
+        goal.duration = ""
+
     navi_action_client.send_goal(goal)
-    navi_action_client.wait_for_result()
+    while not rospy.is_shutdown():
+        status = navi_action_client.get_status()
+        if (status == "ACTIVE") or (status == "PENDING"):
+            continue
+        elif (status == "SUCCEEDED"):
+            return True
+        else:
+            return False
+
+
+    #navi_action_client.wait_for_result()
     return navi_action_client.get_result()
+
+def manipulate()
 
 if __name__ == '__main__':
     rospy.init_node('GTP')#, anonymous=True)
@@ -163,7 +197,7 @@ if __name__ == '__main__':
             #rospy.logerr("[GTP]: Can't get task from corresponding topic")
             continue
 
-        # set test scenario
+        # test scenario list
         tasks = []
 
         # BNT
@@ -185,7 +219,8 @@ if __name__ == '__main__':
                 object_type = msg.transportation_task.object.type.data
                 container = msg.transportation_task.container.type.data
 
-                #
+                # check if this source-destination pair is already in the tasks
+                # if it is add new objects in the task
                 new = True
                 for task in tasks:
                     if ((task[0] == destination) and (task[1] == source)):
@@ -195,6 +230,7 @@ if __name__ == '__main__':
                             object_pose = len(task[2]) + 1
                         task[2].append([object_type, object_pose])
 
+                # if no create new task
                 if (new):
                     object_pose = container
                     if (object_pose != 14) and (object_pose != 15):
@@ -210,11 +246,34 @@ if __name__ == '__main__':
         if (Test_state.Type == 3):
             tasks = scenario_optimization(tasks)
 
-        print(tasks)
-
+        rospy.loginfo("[GTP]: Received tasks:")
         table = SingleTable(tasks, "tasks")
         table.inner_heading_row_border = False
         print(table.table)
+
+    # Test Execution
+
+    # BNT
+    if (Test_state.Type == 1):
+	    for i in xrange(len(tasks)):
+            task = tasks.pop(0)
+            if (navi("point", task[0], task[1], task[2]):
+                rospy.loginfo("[GTP]: task %d is done (BNT)", i)
+            else:
+                rospy.logerr("[GTP]: task %d is missed (BNT)", i)
+
+    # BMT or BTT
+    elif (Test_state.Type == 2) or (Test_state.Type == 3):
+        while not rospy.is_shutdown():
+            try:
+                task = tasks.pop(0)
+            except IndexError:
+                break
+            if not (navi("point", task[1], task[1]+"OR", 0):
+                rospy.logerr("[GTP]: Can't get %s", task[1])
+                continue
+
+
 
 
 

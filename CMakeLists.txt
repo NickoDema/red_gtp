@@ -13,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   actionlib
   geometry_msgs
   atwork_ros_msgs
+  red_msgs
 )
 
 ## System dependencies are found with CMake's conventions
